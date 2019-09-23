@@ -3,7 +3,7 @@ library(shiny)
 values <- reactiveValues(dataset=NULL,toShowColumns=NULL,matrixToPrint=NULL)
 
 ui <- fluidPage(
-  navbarPage(title = "Tarea académica 1"),
+  #headerPanel(title = "Tarea académica 1"),
   
   #Sidebar
   sidebarLayout(
@@ -20,11 +20,13 @@ ui <- fluidPage(
       actionButton("loadDataset","Cargar datos"),
       tags$hr(),
       actionButton("showTable","Mostrar tabla"),
-      checkboxGroupInput("fieldsCBDataset", "Columnas a mostrar:",c()),
+      checkboxGroupInput(inputId = "fieldsCBDataset", "Columnas a mostrar:",c()),
       tags$hr(),
       helpText("Nota: Si no cargas un dataset, no ocurrirá nada al apretar el botón."),
       tags$hr(),
       tags$h3("Normalización"),
+      selectInput("normalizationMethods", "Metodos",
+                  c("No hay opciones")),
       selectInput("fieldsDataset", "Campos",
                   c("No hay opciones")),
       helpText("Nota: Solo se pueden normalizar los campos Q6"),
@@ -36,15 +38,22 @@ ui <- fluidPage(
       actionButton("tranformData","Transformar"),
       tags$hr(),
       tags$h3("Matriz de distancia"),
-      helpText("Nota: Distancia Euclideana"),
+      selectInput("distanceMethods", "Metodos",
+                  c("No hay opciones")),
+      helpText("Por defecto: Distancia Euclideana"),
       actionButton("matrixDistanceBtn","Generar Matriz de distancia"),
-      downloadLink("downloadDataMatrix", "Descargar archivo .dmta")
+      downloadLink("downloadDataMatrix", "Descargar archivo .dmta"),
+      style = "overflow-y:scroll; max-height: 100vh"
     ),
     
     #Main
     mainPanel(
-      tableOutput("contents"),
-      plotOutput("plot")
+      tabsetPanel(
+        tabPanel("Tabla", tableOutput("contents")),
+        tabPanel("Gráfico", plotOutput("plot"))
+      ),
+      height = "100%",
+      style = "overflow-y:scroll; max-height: 100vh;"
     )
   )
 )
@@ -64,10 +73,26 @@ server <- function(input, output, session) {
       values$dataset = read.csv(inFile$datapath,fileEncoding = input$fileEncoding)
       updateSelectInput(session, "fieldsDataset", choices = names(values$dataset))
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
+      updateSelectInput(session, "normalizationMethods",
+                        choices = c("Normalizacion lineal" = "linealNorm"
+                                    ,"Normalizacion por el valor maximo de los elementos" = "maxEleNorm"))
+      updateSelectInput(session, "distanceMethods",
+                        choices = c("Distancia Euclideana" = "euclidean"
+                                    ,"Distancia Minkowski" = "minkowski"
+                                    ,"Distancia Manhattan" = "manhattan"
+                                    ,"Distancia Mahalanobis" = "mahalanobis"))
     } else {
       values$dataset = read.csv(inFile$datapath)
       updateSelectInput(session, "fieldsDataset", choices = names(values$dataset))
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
+      updateSelectInput(session, "normalizationMethods",
+                        choices = c("Normalizacion lineal" = "linealNorm"
+                                    ,"Normalizacion por el valor maximo de los elementos" = "maxEleNorm"))
+      updateSelectInput(session, "distanceMethods",
+                        choices = c("Distancia Euclideana" = "euclidean"
+                                    ,"Distancia Minkowski" = "minkowski"
+                                    ,"Distancia Manhattan" = "manhattan"
+                                    ,"Distancia Mahalanobis" = "mahalanobis"))
     }
   })
   
@@ -92,11 +117,17 @@ server <- function(input, output, session) {
   #React to normalize
   observeEvent(input$normalizeData, {
     
+    #linealNorm
     normalize = function(x) {
       return (((x - min(x, na.rm = T)) / (max(x, na.rm = T) - min(x, na.rm = T))))
     }
+    #maxEleNorm
+    normalize2 = function(x) {
+      return(x / max(x, na.rm = T))
+    }
     
     toNormalize = input$fieldsDataset
+    method = input$normalizationMethods
     
     ## Clean variable
     # Not numbers to => NA
@@ -113,7 +144,14 @@ server <- function(input, output, session) {
     if(toNormalize == "Q3..AGE"){
       values$dataset[[toNormalize]] = as.numeric(format(round(values$dataset[[toNormalize]], 0)))
     }
-    values$dataset[[toNormalize]] =  normalize(values$dataset[[toNormalize]])
+    
+    ##choose method
+    if(method == "maxEleNorm"){
+      values$dataset[[toNormalize]] =  normalize2(values$dataset[[toNormalize]])  
+    } else {
+      values$dataset[[toNormalize]] =  normalize(values$dataset[[toNormalize]])
+    }
+    
     result = values$dataset[[toNormalize]]
     nameExtention = paste(toNormalize,".dmat",sep="")
     #data1 = saveRDS(result, file = nameExtention)
@@ -142,13 +180,23 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$matrixDistanceBtn, {
-    print("entre")
     tableDistance = values$matrixToPrint
     
     tableDistance = na.omit(tableDistance)
     
     # Distancia euclideana # ALGORITMO
-    matrixTable = as.matrix(dist(tableDistance,method = "euclidean"))
+    
+    methodDistance = input$distanceMethods
+    if(methodDistance == "minkowski"){
+      matrixTable = as.matrix(dist(tableDistance,method = "minkowski"))
+    }else if(methodDistance == "manhattan"){
+      matrixTable = as.matrix(dist(tableDistance,method = "manhattan"))
+    }else if(methodDistance == "mahalanobis"){
+      #Reimplementar esto
+      matrixTable = as.matrix(dist(tableDistance,method = "manhattan"))
+    }else{
+      matrixTable = as.matrix(dist(tableDistance,method = "euclidean"))
+    }
     
     View(matrixTable)
     
