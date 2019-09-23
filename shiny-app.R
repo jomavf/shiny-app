@@ -200,6 +200,10 @@ server <- function(input, output, session) {
     
     View(matrixTable)
     
+    output$plot = renderPlot({
+      plot(matrixTable)
+    })
+    
     output$downloadDataMatrix <- downloadHandler(
       filename = function() {
         paste("matrix-table","-", Sys.Date(), ".dmat", sep="")
