@@ -1,4 +1,7 @@
 library(shiny)
+options(scipen=999)  # turn-off scientific notation like 1e+48
+library(ggplot2)
+theme_set(theme_bw())  # pre-set the bw theme.
 
 values <- reactiveValues(dataset=NULL,toShowColumns=NULL,matrixToPrint=NULL)
 
@@ -34,7 +37,8 @@ ui <- fluidPage(
       downloadLink("downloadData", "Descargar archivo .dat"),
       tags$hr(),
       tags$h3("Categórico a numérico"),
-      helpText("Nota: Esto convertirá todos las columnas Q6"),
+      selectInput("fieldsDatasetNorm", "Campos",
+                  c("No hay opciones")),
       actionButton("tranformData","Transformar"),
       tags$hr(),
       tags$h3("Matriz de distancia"),
@@ -42,7 +46,7 @@ ui <- fluidPage(
                   c("No hay opciones")),
       helpText("Por defecto: Distancia Euclideana"),
       actionButton("matrixDistanceBtn","Generar Matriz de distancia"),
-      downloadLink("downloadDataMatrix", "Descargar archivo .dmta"),
+      downloadLink("downloadDataMatrix", "Descargar archivo .dmat"),
       style = "overflow-y:scroll; max-height: 100vh"
     ),
     
@@ -50,7 +54,11 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(
         tabPanel("Tabla", tableOutput("contents")),
-        tabPanel("Gráfico", plotOutput("plot"))
+        tabPanel("Gráfico", 
+                 plotOutput(outputId = "plot", brush = "plot_brush"),
+                 fluidRow(tableOutput("data_brush"))
+                 ),
+        tabPanel("Tabla resultado", plotOutput("resultTable"))
       ),
       height = "100%",
       style = "overflow-y:scroll; max-height: 100vh;"
@@ -72,6 +80,7 @@ server <- function(input, output, session) {
     if(input$fileEncoding =="latin1"){
       values$dataset = read.csv(inFile$datapath,fileEncoding = input$fileEncoding)
       updateSelectInput(session, "fieldsDataset", choices = names(values$dataset))
+      updateSelectInput(session, "fieldsDatasetNorm", choices = names(values$dataset))
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
       updateSelectInput(session, "normalizationMethods",
                         choices = c("Normalizacion lineal" = "linealNorm"
@@ -84,6 +93,7 @@ server <- function(input, output, session) {
     } else {
       values$dataset = read.csv(inFile$datapath)
       updateSelectInput(session, "fieldsDataset", choices = names(values$dataset))
+      updateSelectInput(session, "fieldsDatasetNorm", choices = names(values$dataset))
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
       updateSelectInput(session, "normalizationMethods",
                         choices = c("Normalizacion lineal" = "linealNorm"
@@ -169,11 +179,13 @@ server <- function(input, output, session) {
   #React to transform data
   observeEvent(input$tranformData,{
     
-    f = function(x){
+    fTransform = function(x){
       as.numeric(factor(x, levels = c('JOY','MEH','DESPAIR'),labels = c(1,2,3)))
     }
-    toNormalize = input$fieldsDataset
-    values$dataset[["Q6...100.Grand.Bar"]] = f(values$dataset[["Q6...100.Grand.Bar"]])
+    toTransform = input$fieldsDatasetNorm
+    print("TO")
+    print(toTransform)
+    values$dataset[[toTransform]] = fTransform(values$dataset[[toTransform]])
     
     #dataset$Q6...100.Grand.Bar=factor(dataset$Q6...100.Grand.Bar, levels = c('JOY','MEH','DESPAIR'),labels = c(1,2,3))
     
@@ -184,6 +196,7 @@ server <- function(input, output, session) {
     
     tableDistance = na.omit(tableDistance)
     
+    View(tableDistance)
     # Distancia euclideana # ALGORITMO
     
     methodDistance = input$distanceMethods
@@ -200,8 +213,32 @@ server <- function(input, output, session) {
     
     View(matrixTable)
     
+    #output$resultTable
+    
     output$plot = renderPlot({
-      plot(matrixTable)
+      #plot(matrixTable)
+      data(matrixTable, package = "ggplot2")
+      # Scatterplot
+      gg <- ggplot(midwest, aes(x=area, y=poptotal)) +
+        geom_point(aes(col=state, size=popdensity)) +
+        geom_smooth(method="loess", se=F) +
+        xlim(c(0, 0.1)) +
+        ylim(c(0, 500000)) +
+        labs(subtitle="Area Vs Population",
+             y="Population",
+             x="Area",
+             title="Scatterplot",
+             caption = "Source: midwest")
+      plot(gg)
+    })
+    
+    output$data_brush = renderTable({
+      n = nrow(brushedPoints(dataset, brush = input$plot_brush))
+      if(n == 0){
+        return()
+      }
+      else
+        brushedPoints(dataset,brush = input$plot_brush)
     })
     
     output$downloadDataMatrix <- downloadHandler(
