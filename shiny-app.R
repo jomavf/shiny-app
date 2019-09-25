@@ -47,6 +47,9 @@ ui <- fluidPage(
       helpText("Por defecto: Distancia Euclideana"),
       actionButton("matrixDistanceBtn","Generar Matriz de distancia"),
       downloadLink("downloadDataMatrix", "Descargar archivo .dmat"),
+      tags$hr(),
+      actionButton("btnCandy","Generar grafico 1"),
+      actionButton("btnFloruish","Generar grafico 2"),
       style = "overflow-y:scroll; max-height: 100vh"
     ),
     
@@ -58,7 +61,8 @@ ui <- fluidPage(
                  plotOutput(outputId = "plot", brush = "plot_brush"),
                  fluidRow(tableOutput("data_brush"))
                  ),
-        tabPanel("Tabla resultado", plotOutput("resultTable"))
+        tabPanel("Tabla resultado", plotOutput(outputId = "resultTable", brush = "plot_brush2"),
+                 fluidRow(tableOutput("data_brush2")))
       ),
       height = "100%",
       style = "overflow-y:scroll; max-height: 100vh;"
@@ -84,7 +88,7 @@ server <- function(input, output, session) {
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
       updateSelectInput(session, "normalizationMethods",
                         choices = c("Normalizacion lineal" = "linealNorm"
-                                    ,"Normalizacion por el valor maximo de los elementos" = "maxEleNorm"))
+                                    ,"Normalizacion por desviacion estandar" = "maxEleNorm"))
       updateSelectInput(session, "distanceMethods",
                         choices = c("Distancia Euclideana" = "euclidean"
                                     ,"Distancia Minkowski" = "minkowski"
@@ -97,7 +101,7 @@ server <- function(input, output, session) {
       updateCheckboxGroupInput(session, "fieldsCBDataset", choices = names(values$dataset))
       updateSelectInput(session, "normalizationMethods",
                         choices = c("Normalizacion lineal" = "linealNorm"
-                                    ,"Normalizacion por el valor maximo de los elementos" = "maxEleNorm"))
+                                    ,"Normalizacion por desviacion estandar" = "maxEleNorm"))
       updateSelectInput(session, "distanceMethods",
                         choices = c("Distancia Euclideana" = "euclidean"
                                     ,"Distancia Minkowski" = "minkowski"
@@ -133,7 +137,7 @@ server <- function(input, output, session) {
     }
     #maxEleNorm
     normalize2 = function(x) {
-      return(x / max(x, na.rm = T))
+      return((x - mean(x, na.rm = TRUE))/ sd(x, na.rm = TRUE))
     }
     
     toNormalize = input$fieldsDataset
@@ -212,33 +216,28 @@ server <- function(input, output, session) {
     }
     
     View(matrixTable)
+    print(values$dataset[[colnames(values$matrixToPrint)[1]]])
+    print(values$toShowColumns[1])
     
     #output$resultTable
     
     output$plot = renderPlot({
       #plot(matrixTable)
-      data(matrixTable, package = "ggplot2")
+      xx = colnames(values$matrixToPrint)[1]
+      yy = colnames(values$matrixToPrint)[2]
+      
       # Scatterplot
-      gg <- ggplot(midwest, aes(x=area, y=poptotal)) +
-        geom_point(aes(col=state, size=popdensity)) +
-        geom_smooth(method="loess", se=F) +
-        xlim(c(0, 0.1)) +
-        ylim(c(0, 500000)) +
-        labs(subtitle="Area Vs Population",
-             y="Population",
-             x="Area",
-             title="Scatterplot",
-             caption = "Source: midwest")
-      plot(gg)
+      ggplot(data = values$dataset, aes_string(x=values$toShowColumns[1], y=values$toShowColumns[2])) +
+        geom_point() 
     })
     
     output$data_brush = renderTable({
-      n = nrow(brushedPoints(dataset, brush = input$plot_brush))
+      n = nrow(brushedPoints(values$dataset, brush = input$plot_brush))
       if(n == 0){
         return()
       }
       else
-        brushedPoints(dataset,brush = input$plot_brush)
+        brushedPoints(values$dataset,brush = input$plot_brush)
     })
     
     output$downloadDataMatrix <- downloadHandler(
@@ -248,8 +247,28 @@ server <- function(input, output, session) {
       content = function(file) {
         write(matrixTable,file)
       }
+       
     )
   })
+  
+  observeEvent(input$btnCandy, {
+    
+    output$resultTable = renderPlot({
+      plot(factor(values$dataset[[values$toShowColumns[1]]]), factor(values$dataset[[values$toShowColumns[2]]]),
+           )
+    })
+    
+    output$data_brush2 = renderTable({
+      n = nrow(brushedPoints(values$dataset, brush = input$plot_brush2))
+      if(n == 0){
+        return()
+      }
+      else
+        brushedPoints(values$dataset,brush = input$plot_brush2)
+    })
+    
+  })
+  
 }
 
 shinyApp(ui = ui, server = server)
